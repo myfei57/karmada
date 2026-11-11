@@ -27,7 +27,9 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/go-openapi/jsonpointer"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,6 +55,15 @@ type OverrideManager interface {
 	// - First apply ClusterOverridePolicy;
 	// - Then apply OverridePolicy;
 	ApplyOverridePolicies(rawObj *unstructured.Unstructured, cluster string) (appliedClusterPolicies *AppliedOverrides, appliedNamespacedPolicies *AppliedOverrides, err error)
+
+	// ApplyOverridePoliciesWithOriginGraph behaves exactly like ApplyOverridePolicies, including the
+	// ClusterOverridePolicy-then-OverridePolicy apply order, selector matching, policy sorting and scope
+	// priority rules, but additionally produces an OverrideOriginGraph that traces every actual field
+	// write, overwrite, deletion and array index movement back to the concrete policy overrider.
+	// The OverrideOriginGraph feature gate must be enabled; otherwise the graph is nil and only the
+	// legacy AppliedOverrides lists are returned. On any override error the graph is discarded and the
+	// original error is returned, so a failed run never produces a fake complete graph.
+	ApplyOverridePoliciesWithOriginGraph(rawObj *unstructured.Unstructured, cluster string) (appliedClusterPolicies *AppliedOverrides, appliedNamespacedPolicies *AppliedOverrides, graph *OverrideOriginGraph, err error)
 }
 
 // GeneralOverridePolicy is an abstract object of ClusterOverridePolicy and OverridePolicy
@@ -73,8 +84,14 @@ type overrideOption struct {
 }
 
 type policyOverriders struct {
-	name       string
-	namespace  string
+	name      string
+	namespace string
+	// policyKind is the kind of the referencing policy, either OverridePolicy or ClusterOverridePolicy.
+	policyKind string
+	// uid and generation identify the exact policy revision that produced these overriders.
+	// They are consumed by the OverrideOriginGraph and left empty on the legacy apply path.
+	uid        types.UID
+	generation int64
 	overriders policyv1alpha1.Overriders
 }
 
@@ -244,11 +261,17 @@ func (o *overrideManagerImpl) getOverridersFromOverridePolicies(policies []Gener
 		}
 		for _, rule := range overrideRules {
 			if rule.TargetCluster == nil || (rule.TargetCluster != nil && util.ClusterMatches(cluster, *rule.TargetCluster)) {
-				clusterMatchingPolicyOverriders = append(clusterMatchingPolicyOverriders, policyOverriders{
+				item := policyOverriders{
 					name:       policy.GetName(),
 					namespace:  policy.GetNamespace(),
+					policyKind: policyKindOf(policy),
 					overriders: rule.Overriders,
-				})
+				}
+				if meta, ok := policy.(metav1.Object); ok {
+					item.uid = meta.GetUID()
+					item.generation = meta.GetGeneration()
+				}
+				clusterMatchingPolicyOverriders = append(clusterMatchingPolicyOverriders, item)
 			}
 		}
 	}

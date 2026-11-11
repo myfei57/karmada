@@ -163,6 +163,18 @@ const (
 	// owner: @XiShanYongYe-Chang, @RainbowMango, @mszacillo
 	// alpha: v1.18
 	SchedulingOvercommitProtection featuregate.Feature = "SchedulingOvercommitProtection"
+
+	// OverrideOriginGraph enables field-level origin tracing for override policies.
+	// When enabled, the override manager can produce an OverrideOriginGraph that records,
+	// for a fixed resource and cluster input, every actual field write made by
+	// ClusterOverridePolicy and OverridePolicy overriders, how later writes overwrite or
+	// delete earlier ones, array index movements and the final owning policy of each
+	// surviving field. The graph never stores full-text policy configuration and redacts
+	// sensitive field values to path/summary only. It is disabled by default and the
+	// existing AppliedOverrides behavior is unchanged when it is off.
+	//
+	// alpha: v1.21
+	OverrideOriginGraph featuregate.Feature = "OverrideOriginGraph"
 )
 
 var (
@@ -193,6 +205,7 @@ var (
 		ControllerPriorityQueue:           {Default: true, PreRelease: featuregate.Beta},
 		WorkloadAffinity:                  {Default: false, PreRelease: featuregate.Alpha},
 		SchedulingOvercommitProtection:    {Default: false, PreRelease: featuregate.Alpha},
+		OverrideOriginGraph:               {Default: false, PreRelease: featuregate.Alpha},
 	}
 )
 

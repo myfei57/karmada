@@ -375,11 +375,13 @@ func TestGetMatchingOverridePolicies(t *testing.T) {
 				{
 					name:       overridePolicy2.Name,
 					namespace:  overridePolicy2.Namespace,
+					policyKind: policyv1alpha1.ResourceKindOverridePolicy,
 					overriders: overriders3,
 				},
 				{
 					name:       overridePolicy1.Name,
 					namespace:  overridePolicy1.Namespace,
+					policyKind: policyv1alpha1.ResourceKindOverridePolicy,
 					overriders: overriders1,
 				},
 			},
@@ -393,16 +395,19 @@ func TestGetMatchingOverridePolicies(t *testing.T) {
 				{
 					name:       overridePolicy2.Name,
 					namespace:  overridePolicy2.Namespace,
+					policyKind: policyv1alpha1.ResourceKindOverridePolicy,
 					overriders: overriders3,
 				},
 				{
 					name:       overridePolicy1.Name,
 					namespace:  overridePolicy1.Namespace,
+					policyKind: policyv1alpha1.ResourceKindOverridePolicy,
 					overriders: overriders1,
 				},
 				{
 					name:       overridePolicy1.Name,
 					namespace:  overridePolicy1.Namespace,
+					policyKind: policyv1alpha1.ResourceKindOverridePolicy,
 					overriders: overriders2,
 				},
 			},
@@ -416,6 +421,7 @@ func TestGetMatchingOverridePolicies(t *testing.T) {
 				{
 					name:       overridePolicy3.Name,
 					namespace:  overridePolicy3.Namespace,
+					policyKind: policyv1alpha1.ResourceKindOverridePolicy,
 					overriders: overriders3,
 				},
 			},
@@ -429,6 +435,7 @@ func TestGetMatchingOverridePolicies(t *testing.T) {
 				{
 					name:       oldOverridePolicy.Name,
 					namespace:  oldOverridePolicy.Namespace,
+					policyKind: policyv1alpha1.ResourceKindClusterOverridePolicy,
 					overriders: overriders3,
 				},
 			},

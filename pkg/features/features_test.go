@@ -36,6 +36,19 @@ func TestPriorityBasedPreemptiveSchedulingFeatureGate(t *testing.T) {
 	}
 }
 
+func TestOverrideOriginGraphFeatureGate(t *testing.T) {
+	spec, exists := FeatureGate.GetAll()[OverrideOriginGraph]
+	if !exists {
+		t.Fatalf("feature gate %q is not registered", OverrideOriginGraph)
+	}
+	if spec.Default {
+		t.Errorf("feature gate %q should be disabled by default", OverrideOriginGraph)
+	}
+	if spec.PreRelease != featuregate.Alpha {
+		t.Errorf("feature gate %q pre-release stage = %q, want %q", OverrideOriginGraph, spec.PreRelease, featuregate.Alpha)
+	}
+}
+
 func TestPriorityBasedPreemptiveSchedulingEnabled(t *testing.T) {
 	originalFeatureGate := FeatureGate.DeepCopy()
 	t.Cleanup(func() {

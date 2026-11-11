@@ -17,6 +17,8 @@ limitations under the License.
 package declarative
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"sort"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -29,24 +31,53 @@ import (
 	workv1alpha2 "github.com/karmada-io/karmada/pkg/apis/work/v1alpha2"
 	"github.com/karmada-io/karmada/pkg/resourceinterpreter/customized/declarative/configmanager"
 	"github.com/karmada-io/karmada/pkg/resourceinterpreter/customized/declarative/luavm"
+	"github.com/karmada-io/karmada/pkg/resourceinterpreter/customized/declarative/shadow"
 	"github.com/karmada-io/karmada/pkg/util/fedinformer/genericmanager"
 	"github.com/karmada-io/karmada/pkg/util/interpreter/validation"
 )
+
+// ShadowRunner is the optional side-by-side evaluator for local Lua customizations.
+// Implementations must be fully non-blocking and observational: they never return
+// candidate results to the active interpretation path, so Work, replica and status
+// decisions remain identical whether a runner is configured or not.
+type ShadowRunner interface {
+	// SubmitGetReplicas enqueues a shadow evaluation for the InterpretReplica operation.
+	SubmitGetReplicas(object *unstructured.Unstructured, activeReplica int32, activeRequires *workv1alpha2.ReplicaRequirements, activeErr error, activeScriptVersion string)
+
+	// SubmitInterpretHealth enqueues a shadow evaluation for the InterpretHealth operation.
+	SubmitInterpretHealth(object *unstructured.Unstructured, healthy bool, activeErr error, activeScriptVersion string)
+
+	// SubmitReviseReplica enqueues a shadow evaluation for the ReviseReplica operation.
+	SubmitReviseReplica(object, revised *unstructured.Unstructured, desiredReplica int64, activeErr error, activeScriptVersion string)
+}
+
+// Compile-time check that the shadow interpreter satisfies the ShadowRunner contract.
+var _ ShadowRunner = (*shadow.Interpreter)(nil)
 
 // ConfigurableInterpreter interprets resources with resource interpreter customizations.
 type ConfigurableInterpreter struct {
 	// configManager caches all ResourceInterpreterCustomizations.
 	configManager configmanager.ConfigManager
 	luaVM         *luavm.VM
+	// shadow is optional. When nil, interpretation behaves exactly as before the
+	// shadow feature existed. It only observes active calls and never feeds results back.
+	shadow ShadowRunner
 }
 
 // NewConfigurableInterpreter builds a new interpreter by registering the
 // event handler to the provided informer instance.
 func NewConfigurableInterpreter(informer genericmanager.SingleClusterInformerManager) *ConfigurableInterpreter {
+	return NewConfigurableInterpreterWithShadow(informer, nil)
+}
+
+// NewConfigurableInterpreterWithShadow builds a new interpreter with an optional
+// shadow runner. A nil runner disables shadow interpretation entirely.
+func NewConfigurableInterpreterWithShadow(informer genericmanager.SingleClusterInformerManager, shadowRunner ShadowRunner) *ConfigurableInterpreter {
 	return &ConfigurableInterpreter{
 		configManager: configmanager.NewInterpreterConfigManager(informer),
 		// TODO: set an appropriate pool size.
-		luaVM: luavm.New(false, 10),
+		luaVM:  luavm.New(false, 10),
+		shadow: shadowRunner,
 	}
 }
 
@@ -98,6 +129,11 @@ func (c *ConfigurableInterpreter) GetReplicas(object *unstructured.Unstructured)
 	klog.V(4).Infof("Running operation %s for object: %v %s/%s with configurable interpreter.",
 		configv1alpha1.InterpreterOperationInterpretReplica, object.GroupVersionKind(), object.GetNamespace(), object.GetName())
 	replicas, requires, err = c.luaVM.GetReplicas(object, script)
+	// The shadow runner is purely observational: its submission is non-blocking and
+	// its result can never alter the replicas returned to the controllers.
+	if c.shadow != nil {
+		c.shadow.SubmitGetReplicas(object, replicas, requires, err, scriptDigest(script))
+	}
 	return
 }
 
@@ -136,6 +172,11 @@ func (c *ConfigurableInterpreter) ReviseReplica(object *unstructured.Unstructure
 	klog.V(4).Infof("Running operation %s for object: %v %s/%s with configurable interpreter.",
 		configv1alpha1.InterpreterOperationReviseReplica, object.GroupVersionKind(), object.GetNamespace(), object.GetName())
 	revised, err = c.luaVM.ReviseReplica(object, replica, script)
+	// The shadow runner only observes the active revision; the revised object applied
+	// to the cluster always comes from the active VM, never from the candidate script.
+	if c.shadow != nil {
+		c.shadow.SubmitReviseReplica(object, revised, replica, err, scriptDigest(script))
+	}
 	return
 }
 
@@ -260,7 +301,19 @@ func (c *ConfigurableInterpreter) InterpretHealth(object *unstructured.Unstructu
 	klog.V(4).Infof("Running operation %s for object: %v %s/%s with configurable interpreter.",
 		configv1alpha1.InterpreterOperationInterpretHealth, object.GroupVersionKind(), object.GetNamespace(), object.GetName())
 	health, err = c.luaVM.InterpretHealth(object, script)
+	// Shadow health evaluations are diagnostics only; the health state consumed by
+	// status controllers is always the active result.
+	if c.shadow != nil {
+		c.shadow.SubmitInterpretHealth(object, health, err, scriptDigest(script))
+	}
 	return
+}
+
+// scriptDigest returns a bounded sha256 prefix of a Lua script, usable as a stable
+// version label without retaining the script source in diagnostics.
+func scriptDigest(script string) string {
+	sum := sha256.Sum256([]byte(script))
+	return hex.EncodeToString(sum[:])[:12]
 }
 
 func (c *ConfigurableInterpreter) getCustomAccessor(kind schema.GroupVersionKind) (configmanager.CustomAccessor, bool) {

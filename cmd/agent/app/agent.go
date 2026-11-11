@@ -56,6 +56,7 @@ import (
 	"github.com/karmada-io/karmada/pkg/karmadactl/util/apiclient"
 	"github.com/karmada-io/karmada/pkg/metrics"
 	"github.com/karmada-io/karmada/pkg/resourceinterpreter"
+	"github.com/karmada-io/karmada/pkg/resourceinterpreter/customized/declarative/shadow"
 	"github.com/karmada-io/karmada/pkg/sharedcli"
 	"github.com/karmada-io/karmada/pkg/sharedcli/klogflag"
 	"github.com/karmada-io/karmada/pkg/sharedcli/profileflag"
@@ -253,6 +254,7 @@ func run(ctx context.Context, opts *options.Options) error {
 	ctrlmetrics.Registry.MustRegister(metrics.ClusterCollectors()...)
 	ctrlmetrics.Registry.MustRegister(metrics.ResourceCollectorsForAgent()...)
 	ctrlmetrics.Registry.MustRegister(metrics.PoolCollectors()...)
+	ctrlmetrics.Registry.MustRegister(shadow.Collectors()...)
 	ctrlmetrics.Registry.MustRegister(metrics.NewBuildInfoCollector())
 
 	if err = setupControllers(ctx, controllerManager, opts); err != nil {
@@ -280,7 +282,11 @@ func setupControllers(ctx context.Context, mgr controllerruntime.Manager, opts *
 	sharedFactory.Start(ctx.Done())
 	sharedFactory.WaitForCacheSync(ctx.Done())
 
-	resourceInterpreter := resourceinterpreter.NewResourceInterpreter(controlPlaneInformerManager, serviceLister)
+	shadowOptions, err := buildShadowInterpreterOptions(opts)
+	if err != nil {
+		return err
+	}
+	resourceInterpreter := resourceinterpreter.NewResourceInterpreter(controlPlaneInformerManager, serviceLister, shadowOptions...)
 	if err := resourceInterpreter.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start resource interpreter: %w", err)
 	}
@@ -323,6 +329,23 @@ func setupControllers(ctx context.Context, mgr controllerruntime.Manager, opts *
 	}()
 
 	return nil
+}
+
+// buildShadowInterpreterOptions loads the optional shadow resource interpreter
+// configuration file and translates it into resource interpreter options. A missing
+// path or a disabled configuration leaves the active interpretation path unchanged.
+func buildShadowInterpreterOptions(opts *options.Options) ([]resourceinterpreter.Option, error) {
+	if opts.ShadowResourceInterpreterConfigFile == "" {
+		return nil, nil
+	}
+	shadowConfig, err := shadow.LoadConfigFromFile(opts.ShadowResourceInterpreterConfigFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load shadow resource interpreter config: %w", err)
+	}
+	if !shadowConfig.Enabled {
+		return nil, nil
+	}
+	return []resourceinterpreter.Option{resourceinterpreter.WithShadowResourceInterpreter(shadowConfig)}, nil
 }
 
 func startClusterStatusController(ctx controllerscontext.Context) (bool, error) {

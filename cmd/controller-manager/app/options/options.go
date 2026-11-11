@@ -142,6 +142,11 @@ type Options struct {
 	FederatedResourceQuotaOptions FederatedResourceQuotaOptions
 	// ClusterFailoverOptions holds the cluster failover configurations.
 	ClusterFailoverOptions ClusterFailoverOptions
+	// ShadowResourceInterpreterConfigFile is the path to a YAML file configuring the
+	// optional shadow resource interpreter. When empty or disabled, local Lua
+	// customization behavior is completely unchanged. Shadow evaluations never
+	// participate in Work, replica or status decisions.
+	ShadowResourceInterpreterConfigFile string
 }
 
 // NewOptions builds an empty options.
@@ -223,6 +228,11 @@ func (o *Options) AddFlags(flags *pflag.FlagSet, allControllers, disabledByDefau
 	o.ProfileOpts.AddFlags(flags)
 	o.HPAControllerConfiguration.AddFlags(flags)
 	o.FederatedResourceQuotaOptions.AddFlags(flags)
+	flags.StringVar(&o.ShadowResourceInterpreterConfigFile, "shadow-resource-interpreter-config", o.ShadowResourceInterpreterConfigFile,
+		"Path to a YAML file configuring the optional shadow resource interpreter. The shadow interpreter runs candidate local Lua "+
+			"scripts (GetReplicas, InterpretHealth and ReviseReplica only) side-by-side with the active interpretation on deep-copied "+
+			"inputs and records diagnostics when results diverge. Candidate results are never used for Work, replica or status decisions; "+
+			"webhook and external interpreters do not participate. Empty disables the feature.")
 	features.FeatureGate.AddFlag(flags)
 }
 

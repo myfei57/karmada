@@ -30,6 +30,7 @@ import (
 	configv1alpha1 "github.com/karmada-io/karmada/pkg/apis/config/v1alpha1"
 	workv1alpha2 "github.com/karmada-io/karmada/pkg/apis/work/v1alpha2"
 	"github.com/karmada-io/karmada/pkg/resourceinterpreter/customized/declarative"
+	"github.com/karmada-io/karmada/pkg/resourceinterpreter/customized/declarative/shadow"
 	"github.com/karmada-io/karmada/pkg/resourceinterpreter/customized/webhook"
 	"github.com/karmada-io/karmada/pkg/resourceinterpreter/customized/webhook/request"
 	"github.com/karmada-io/karmada/pkg/resourceinterpreter/default/native"
@@ -80,12 +81,30 @@ type ResourceInterpreter interface {
 	// other common method
 }
 
+// Option allows optional behavior, such as the shadow resource interpreter, to be
+// attached to a ResourceInterpreter without changing the default construction path.
+type Option func(*customResourceInterpreterImpl)
+
+// WithShadowResourceInterpreter enables side-by-side shadow evaluation of explicitly
+// allowed local Lua customization operations. A nil or disabled config leaves the
+// active interpretation path completely unchanged. Shadow results never participate
+// in Work, replica or status decisions.
+func WithShadowResourceInterpreter(config *shadow.Config) Option {
+	return func(impl *customResourceInterpreterImpl) {
+		impl.shadowConfig = config
+	}
+}
+
 // NewResourceInterpreter builds a new ResourceInterpreter object.
-func NewResourceInterpreter(informer genericmanager.SingleClusterInformerManager, serviceLister corev1.ServiceLister) ResourceInterpreter {
-	return &customResourceInterpreterImpl{
+func NewResourceInterpreter(informer genericmanager.SingleClusterInformerManager, serviceLister corev1.ServiceLister, opts ...Option) ResourceInterpreter {
+	impl := &customResourceInterpreterImpl{
 		informer:      informer,
 		serviceLister: serviceLister,
 	}
+	for _, opt := range opts {
+		opt(impl)
+	}
+	return impl
 }
 
 type customResourceInterpreterImpl struct {
@@ -96,20 +115,36 @@ type customResourceInterpreterImpl struct {
 	customizedInterpreter   *webhook.CustomizedInterpreter
 	thirdpartyInterpreter   *thirdparty.ConfigurableInterpreter
 	defaultInterpreter      *native.DefaultInterpreter
+
+	// shadowConfig is optional. It is only consulted during Start.
+	shadowConfig *shadow.Config
 }
 
 // Start initializes all interpreters and load all ResourceInterpreterCustomization and
 // ResourceInterpreterWebhookConfiguration configurations into the cache.
 // It is recommended to be called before all controllers. After called, the resource interpreter
 // will be ready to interpret custom resources.
-func (i *customResourceInterpreterImpl) Start(_ context.Context) (err error) {
+func (i *customResourceInterpreterImpl) Start(ctx context.Context) (err error) {
 	klog.Infoln("Starting resource interpreter.")
 
 	i.customizedInterpreter, err = webhook.NewCustomizedInterpreter(i.informer, i.serviceLister)
 	if err != nil {
 		return err
 	}
-	i.configurableInterpreter = declarative.NewConfigurableInterpreter(i.informer)
+
+	// Build the optional shadow interpreter before the configurable interpreter so
+	// that active local Lua calls can be observed from the very first invocation.
+	var shadowRunner declarative.ShadowRunner
+	if i.shadowConfig != nil && i.shadowConfig.Enabled {
+		shadowInterpreter, buildErr := shadow.New(i.shadowConfig)
+		if buildErr != nil {
+			return buildErr
+		}
+		shadowInterpreter.Start(ctx)
+		shadowRunner = shadowInterpreter
+		klog.Infoln("Shadow resource interpreter enabled.")
+	}
+	i.configurableInterpreter = declarative.NewConfigurableInterpreterWithShadow(i.informer, shadowRunner)
 
 	i.thirdpartyInterpreter = thirdparty.NewConfigurableInterpreter()
 	i.defaultInterpreter = native.NewDefaultInterpreter()

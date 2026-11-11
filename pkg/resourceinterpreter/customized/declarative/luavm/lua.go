@@ -71,7 +71,19 @@ func (vm *VM) NewLuaState() (*lua.LState, error) {
 }
 
 // RunScript got a lua vm from pool, and execute script with given arguments.
+// The script execution is bounded by a fixed one-second timeout.
 func (vm *VM) RunScript(script string, fnName string, nRets int, args ...any) ([]lua.LValue, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	return vm.RunScriptWithContext(ctx, script, fnName, nRets, args...)
+}
+
+// RunScriptWithContext gets a lua VM from the pool and executes the script with
+// the given arguments, honoring the caller-supplied context for cancellation and
+// timeout control. Returned LValues are only valid while the pooled LState remains
+// referenced by the current call, so callers must convert them into Go values before
+// the VM is returned to the pool.
+func (vm *VM) RunScriptWithContext(ctx context.Context, script string, fnName string, nRets int, args ...any) ([]lua.LValue, error) {
 	a, err := vm.Pool.Get()
 	if err != nil {
 		return nil, err
@@ -80,12 +92,37 @@ func (vm *VM) RunScript(script string, fnName string, nRets int, args ...any) ([
 
 	l := a.(*lua.LState)
 	l.Pop(l.GetTop())
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 	l.SetContext(ctx)
 
-	err = l.DoString(script)
+	return vm.executeScript(l, script, fnName, nRets, args...)
+}
+
+// RunScriptIsolated executes the script on a brand-new LState that is closed before
+// the call returns, instead of borrowing one from the shared pool. Globals, stack
+// contents or module state mutated by the script therefore cannot leak into any
+// subsequent execution, including executions served by the pooled VMs of the active
+// interpretation path. It is intended for side-by-side "shadow" evaluations whose
+// scripts are not trusted to keep a shared VM clean.
+func (vm *VM) RunScriptIsolated(ctx context.Context, script string, fnName string, nRets int, args ...any) ([]lua.LValue, error) {
+	l, err := vm.NewLuaState()
+	if err != nil {
+		return nil, err
+	}
+	// Close the isolated state eagerly: all values the caller needs must be
+	// converted to Go values before RunScriptIsolated returns.
+	defer l.Close()
+
+	if ctx != nil {
+		l.SetContext(ctx)
+	}
+
+	return vm.executeScript(l, script, fnName, nRets, args...)
+}
+
+// executeScript loads the script, decodes the arguments and invokes the target
+// function on the given LState, returning the requested number of return values.
+func (vm *VM) executeScript(l *lua.LState, script string, fnName string, nRets int, args ...any) ([]lua.LValue, error) {
+	err := l.DoString(script)
 	if err != nil {
 		return nil, err
 	}

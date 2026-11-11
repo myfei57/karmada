@@ -79,6 +79,7 @@ import (
 	"github.com/karmada-io/karmada/pkg/karmadactl/util/apiclient"
 	"github.com/karmada-io/karmada/pkg/metrics"
 	"github.com/karmada-io/karmada/pkg/resourceinterpreter"
+	"github.com/karmada-io/karmada/pkg/resourceinterpreter/customized/declarative/shadow"
 	"github.com/karmada-io/karmada/pkg/sharedcli"
 	"github.com/karmada-io/karmada/pkg/sharedcli/klogflag"
 	"github.com/karmada-io/karmada/pkg/sharedcli/profileflag"
@@ -217,6 +218,7 @@ func Run(ctx context.Context, opts *options.Options) error {
 	ctrlmetrics.Registry.MustRegister(metrics.ClusterCollectors()...)
 	ctrlmetrics.Registry.MustRegister(metrics.ResourceCollectors()...)
 	ctrlmetrics.Registry.MustRegister(metrics.PoolCollectors()...)
+	ctrlmetrics.Registry.MustRegister(shadow.Collectors()...)
 	ctrlmetrics.Registry.MustRegister(metrics.NewBuildInfoCollector())
 
 	setupControllers(ctx, controllerManager, opts)
@@ -232,6 +234,23 @@ func Run(ctx context.Context, opts *options.Options) error {
 }
 
 var controllers = make(controllerscontext.Initializers)
+
+// buildShadowInterpreterOptions loads the optional shadow resource interpreter
+// configuration file and translates it into resource interpreter options. A missing
+// path or a disabled configuration leaves the active interpretation path unchanged.
+func buildShadowInterpreterOptions(opts *options.Options) []resourceinterpreter.Option {
+	if opts.ShadowResourceInterpreterConfigFile == "" {
+		return nil
+	}
+	shadowConfig, err := shadow.LoadConfigFromFile(opts.ShadowResourceInterpreterConfigFile)
+	if err != nil {
+		klog.Fatalf("Failed to load shadow resource interpreter config: %v", err)
+	}
+	if !shadowConfig.Enabled {
+		return nil
+	}
+	return []resourceinterpreter.Option{resourceinterpreter.WithShadowResourceInterpreter(shadowConfig)}
+}
 
 // controllersDisabledByDefault is the set of controllers which is disabled by default
 var controllersDisabledByDefault = sets.New("hpaScaleTargetMarker", "deploymentReplicasSyncer")
@@ -861,7 +880,7 @@ func setupControllers(ctx context.Context, mgr controllerruntime.Manager, opts *
 	sharedFactory.Start(ctx.Done())
 	sharedFactory.WaitForCacheSync(ctx.Done())
 
-	resourceInterpreter := resourceinterpreter.NewResourceInterpreter(controlPlaneInformerManager, serviceLister)
+	resourceInterpreter := resourceinterpreter.NewResourceInterpreter(controlPlaneInformerManager, serviceLister, buildShadowInterpreterOptions(opts)...)
 	if err := resourceInterpreter.Start(ctx); err != nil {
 		klog.Fatalf("Failed to start resource interpreter: %v", err)
 	}

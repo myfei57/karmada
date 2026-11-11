@@ -126,6 +126,23 @@ const (
 	DeletionProtectionAlways   = "Always"
 )
 
+// Define annotations used by the WorkApplyReceipts feature to record per-manifest
+// digests and the webhook mutation summary. They are injected into the manifest
+// workloads by the Work mutating webhook when the feature gate is enabled.
+const (
+	// WorkRequestDigestAnnotation records the digest of the original request manifest
+	// before webhook defaulting/mutation. Secret plaintext is removed before digesting.
+	WorkRequestDigestAnnotation = "work.karmada.io/request-digest"
+
+	// WorkAppliedDigestAnnotation records the digest of the manifest actually dispatched
+	// after pruning, defaulting and Karmada label/annotation injection.
+	WorkAppliedDigestAnnotation = "work.karmada.io/applied-digest"
+
+	// WorkMutationSummaryAnnotation records a size-capped JSON summary of the fields
+	// added/removed by the mutating webhook.
+	WorkMutationSummaryAnnotation = "work.karmada.io/mutation-summary"
+)
+
 // Define eviction reasons.
 const (
 	// EvictionReasonTaintUntolerated describes the eviction is triggered

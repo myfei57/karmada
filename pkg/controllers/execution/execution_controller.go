@@ -50,6 +50,7 @@ import (
 	workv1alpha2 "github.com/karmada-io/karmada/pkg/apis/work/v1alpha2"
 	"github.com/karmada-io/karmada/pkg/detector"
 	"github.com/karmada-io/karmada/pkg/events"
+	"github.com/karmada-io/karmada/pkg/features"
 	"github.com/karmada-io/karmada/pkg/metrics"
 	"github.com/karmada-io/karmada/pkg/resourceinterpreter/default/native/prune"
 	"github.com/karmada-io/karmada/pkg/sharedcli/ratelimiterflag"
@@ -158,7 +159,7 @@ func (c *Controller) Reconcile(ctx context.Context, req controllerruntime.Reques
 		// Do not return when informers are not synced; the following logic can proceed with the dynamic client.
 	}
 
-	return c.syncWork(ctx, clusterName, work)
+	return c.syncWork(ctx, cluster, work)
 }
 
 // SetupWithManager creates a controller and register to controller manager.
@@ -186,17 +187,17 @@ func (c *Controller) SetupWithManager(mgr controllerruntime.Manager) error {
 	)).Complete(c)
 }
 
-func (c *Controller) syncWork(ctx context.Context, clusterName string, work *workv1alpha1.Work) (controllerruntime.Result, error) {
+func (c *Controller) syncWork(ctx context.Context, cluster *clusterv1alpha1.Cluster, work *workv1alpha1.Work) (controllerruntime.Result, error) {
 	start := time.Now()
-	err := c.syncToClusters(ctx, clusterName, work)
+	err := c.syncToClusters(ctx, cluster, work)
 	metrics.ObserveSyncWorkloadLatency(err, start)
 	if err != nil {
-		msg := fmt.Sprintf("Failed to sync work(%s/%s) to cluster(%s), err: %v", work.Namespace, work.Name, clusterName, err)
+		msg := fmt.Sprintf("Failed to sync work(%s/%s) to cluster(%s), err: %v", work.Namespace, work.Name, cluster.Name, err)
 		klog.Error(msg)
 		c.EventRecorder.Event(work, corev1.EventTypeWarning, events.EventReasonSyncWorkloadFailed, msg)
 		return controllerruntime.Result{}, err
 	}
-	msg := fmt.Sprintf("Sync work(%s/%s) to cluster(%s) successful.", work.Namespace, work.Name, clusterName)
+	msg := fmt.Sprintf("Sync work(%s/%s) to cluster(%s) successful.", work.Namespace, work.Name, cluster.Name)
 	klog.V(4).Info(msg)
 	c.EventRecorder.Event(work, corev1.EventTypeNormal, events.EventReasonSyncWorkloadSucceed, msg)
 	return controllerruntime.Result{}, nil
@@ -255,7 +256,7 @@ func (c *Controller) cleanupPolicyClaimMetadata(ctx context.Context, work *workv
 		util.RemoveAnnotations(workload, util.ManagedResourceAnnotations...)
 
 		operationResult, err := c.ObjectWatcher.Update(ctx, cluster.Name, workload, clusterObj)
-		metrics.CountUpdateResourceToCluster(err, workload.GetAPIVersion(), workload.GetKind(), cluster.Name, string(operationResult))
+		metrics.CountUpdateResourceToCluster(err, workload.GetAPIVersion(), workload.GetKind(), cluster.Name, operationResultString(operationResult))
 		if err != nil {
 			klog.ErrorS(err, "Failed to update metadata in the given member cluster", "cluster", cluster.Name)
 			return err
@@ -263,6 +264,14 @@ func (c *Controller) cleanupPolicyClaimMetadata(ctx context.Context, work *workv
 	}
 
 	return nil
+}
+
+// operationResultString safely extracts the operation label for metrics.
+func operationResultString(outcome *objectwatcher.ApplyOutcome) string {
+	if outcome == nil {
+		return ""
+	}
+	return string(outcome.Operation)
 }
 
 // tryDeleteWorkload tries to delete resources in the given member cluster.
@@ -300,30 +309,49 @@ func (c *Controller) removeFinalizer(ctx context.Context, work *workv1alpha1.Wor
 	return controllerruntime.Result{}, nil
 }
 
+// manifestApplyResult pairs a Work manifest ordinal with the outcome of its create/update attempt.
+// It is the single input from which apply receipts and the WorkApplied condition are derived.
+type manifestApplyResult struct {
+	ordinal  int
+	workload *unstructured.Unstructured
+	outcome  *objectwatcher.ApplyOutcome
+	err      error
+}
+
 // syncToClusters ensures that the state of the given object is synchronized to member clusters.
-func (c *Controller) syncToClusters(ctx context.Context, clusterName string, work *workv1alpha1.Work) error {
+func (c *Controller) syncToClusters(ctx context.Context, cluster *clusterv1alpha1.Cluster, work *workv1alpha1.Work) error {
 	var errs []error
 	syncSucceedNum := 0
-	for _, manifest := range work.Spec.Workload.Manifests {
+	results := make([]manifestApplyResult, 0, len(work.Spec.Workload.Manifests))
+	for ordinal, manifest := range work.Spec.Workload.Manifests {
 		workload := &unstructured.Unstructured{}
 		err := workload.UnmarshalJSON(manifest.Raw)
 		if err != nil {
 			klog.ErrorS(err, "Failed to unmarshal workload of the work", "namespace", work.GetNamespace(), "name", work.GetName())
 			errs = append(errs, err)
+			results = append(results, manifestApplyResult{ordinal: ordinal, workload: workload, err: err})
 			continue
 		}
 
+		var outcome *objectwatcher.ApplyOutcome
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			return c.tryCreateOrUpdateWorkload(ctx, clusterName, workload)
+			var applyErr error
+			outcome, applyErr = c.tryCreateOrUpdateWorkload(ctx, cluster.Name, workload)
+			return applyErr
 		})
+		results = append(results, manifestApplyResult{ordinal: ordinal, workload: workload, outcome: outcome, err: err})
 		if err != nil {
-			klog.ErrorS(err, "Failed to create or update resource in the given member cluster", "namespace", workload.GetNamespace(), "name", workload.GetName(), "cluster", clusterName)
-			c.eventf(workload, corev1.EventTypeWarning, events.EventReasonSyncWorkloadFailed, "Failed to create or update resource(%s) in member cluster(%s): %v", klog.KObj(workload), clusterName, err)
+			klog.ErrorS(err, "Failed to create or update resource in the given member cluster", "namespace", workload.GetNamespace(), "name", workload.GetName(), "cluster", cluster.Name)
+			c.eventf(workload, corev1.EventTypeWarning, events.EventReasonSyncWorkloadFailed, "Failed to create or update resource(%s) in member cluster(%s): %v", klog.KObj(workload), cluster.Name, err)
 			errs = append(errs, err)
 			continue
 		}
-		c.eventf(workload, corev1.EventTypeNormal, events.EventReasonSyncWorkloadSucceed, "Successfully applied resource(%v/%v) to cluster %s", workload.GetNamespace(), workload.GetName(), clusterName)
+		c.eventf(workload, corev1.EventTypeNormal, events.EventReasonSyncWorkloadSucceed, "Successfully applied resource(%v/%v) to cluster %s", workload.GetNamespace(), workload.GetName(), cluster.Name)
 		syncSucceedNum++
+	}
+
+	if features.WorkApplyReceiptsEnabled() {
+		return c.persistApplyReceiptsAndCondition(ctx, work, cluster, results)
 	}
 
 	if len(errs) > 0 {
@@ -346,33 +374,33 @@ func (c *Controller) syncToClusters(ctx context.Context, clusterName string, wor
 	return nil
 }
 
-func (c *Controller) tryCreateOrUpdateWorkload(ctx context.Context, clusterName string, workload *unstructured.Unstructured) error {
+func (c *Controller) tryCreateOrUpdateWorkload(ctx context.Context, clusterName string, workload *unstructured.Unstructured) (*objectwatcher.ApplyOutcome, error) {
 	fedKey, err := keys.FederatedKeyFunc(clusterName, workload)
 	if err != nil {
 		klog.ErrorS(err, "Failed to get FederatedKey", "name", workload.GetName())
-		return err
+		return nil, err
 	}
 
 	clusterObj, err := helper.GetObjectFromCache(c.RESTMapper, c.InformerManager, fedKey)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			klog.ErrorS(err, "Failed to get the resource from member cluster", "kind", workload.GetKind(), "namespace", workload.GetNamespace(), "name", workload.GetName(), "cluster", clusterName)
-			return err
+			return nil, err
 		}
-		err = c.ObjectWatcher.Create(ctx, clusterName, workload)
+		outcome, err := c.ObjectWatcher.Create(ctx, clusterName, workload)
 		metrics.CountCreateResourceToCluster(err, workload.GetAPIVersion(), workload.GetKind(), clusterName)
 		if err != nil {
-			return err
+			return outcome, err
 		}
-		return nil
+		return outcome, nil
 	}
 
-	operationResult, err := c.ObjectWatcher.Update(ctx, clusterName, workload, clusterObj)
-	metrics.CountUpdateResourceToCluster(err, workload.GetAPIVersion(), workload.GetKind(), clusterName, string(operationResult))
+	outcome, err := c.ObjectWatcher.Update(ctx, clusterName, workload, clusterObj)
+	metrics.CountUpdateResourceToCluster(err, workload.GetAPIVersion(), workload.GetKind(), clusterName, operationResultString(outcome))
 	if err != nil {
-		return err
+		return outcome, err
 	}
-	return nil
+	return outcome, nil
 }
 
 func (c *Controller) updateWorkDispatchingConditionIfNeeded(ctx context.Context, work *workv1alpha1.Work) error {

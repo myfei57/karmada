@@ -101,6 +101,14 @@ type WorkStatus struct {
 	// ManifestStatuses contains running status of manifests in spec.
 	// +optional
 	ManifestStatuses []ManifestStatus `json:"manifestStatuses,omitempty"`
+
+	// WorkApplyReceipts contains per-manifest apply receipts for the latest observed
+	// Work generation. It is only populated when the WorkApplyReceipts feature gate is enabled.
+	// Each receipt is point-in-time evidence of a confirmed write or observation; it neither
+	// asserts workload health nor guarantees the object will not drift later.
+	// Receipts whose workGeneration differs from the current Work generation are pruned.
+	// +optional
+	WorkApplyReceipts []WorkApplyReceipt `json:"workApplyReceipts,omitempty"`
 }
 
 // ManifestStatus contains running status of a specific manifest in spec.

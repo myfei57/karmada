@@ -513,13 +513,17 @@ func TestController_getEventHandlerIsMemoized(t *testing.T) {
 type stubObjectWatcher struct {
 	versionRecord string
 	recordExists  bool
+	createOutcome *objectwatcher.ApplyOutcome
+	updateOutcome *objectwatcher.ApplyOutcome
+	createErr     error
+	updateErr     error
 }
 
-func (s *stubObjectWatcher) Create(_ context.Context, _ string, _ *unstructured.Unstructured) error {
-	return nil
+func (s *stubObjectWatcher) Create(_ context.Context, _ string, _ *unstructured.Unstructured) (*objectwatcher.ApplyOutcome, error) {
+	return s.createOutcome, s.createErr
 }
-func (s *stubObjectWatcher) Update(_ context.Context, _ string, _, _ *unstructured.Unstructured) (objectwatcher.OperationResult, error) {
-	return objectwatcher.OperationResultNone, nil
+func (s *stubObjectWatcher) Update(_ context.Context, _ string, _, _ *unstructured.Unstructured) (*objectwatcher.ApplyOutcome, error) {
+	return s.updateOutcome, s.updateErr
 }
 func (s *stubObjectWatcher) Delete(_ context.Context, _ string, _ *unstructured.Unstructured) error {
 	return nil

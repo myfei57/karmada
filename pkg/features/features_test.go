@@ -84,3 +84,33 @@ func TestPriorityBasedPreemptiveSchedulingEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkApplyReceiptsFeatureGate(t *testing.T) {
+	spec, exists := FeatureGate.GetAll()[WorkApplyReceipts]
+	if !exists {
+		t.Fatalf("feature gate %q is not registered", WorkApplyReceipts)
+	}
+	if spec.Default {
+		t.Errorf("feature gate %q should be disabled by default", WorkApplyReceipts)
+	}
+	if spec.PreRelease != featuregate.Alpha {
+		t.Errorf("feature gate %q pre-release stage = %q, want %q", WorkApplyReceipts, spec.PreRelease, featuregate.Alpha)
+	}
+}
+
+func TestWorkApplyReceiptsEnabled(t *testing.T) {
+	originalFeatureGate := FeatureGate.DeepCopy()
+	t.Cleanup(func() {
+		FeatureGate = originalFeatureGate
+	})
+
+	if WorkApplyReceiptsEnabled() {
+		t.Fatal("WorkApplyReceipts should be disabled by default")
+	}
+	if err := FeatureGate.Set(fmt.Sprintf("%s=true", WorkApplyReceipts)); err != nil {
+		t.Fatalf("failed to enable feature gate %q: %v", WorkApplyReceipts, err)
+	}
+	if !WorkApplyReceiptsEnabled() {
+		t.Fatal("WorkApplyReceipts should report enabled after being set")
+	}
+}

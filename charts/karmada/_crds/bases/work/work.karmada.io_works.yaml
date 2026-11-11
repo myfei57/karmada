@@ -210,6 +210,194 @@ spec:
                   - identifier
                   type: object
                 type: array
+              workApplyReceipts:
+                description: |-
+                  WorkApplyReceipts contains per-manifest apply receipts for the latest observed
+                  Work generation. It is only populated when the WorkApplyReceipts feature gate is enabled.
+                  Each receipt is point-in-time evidence of a confirmed write or observation; it neither
+                  asserts workload health nor guarantees the object will not drift later.
+                  Receipts whose workGeneration differs from the current Work generation are pruned.
+                items:
+                  description: |-
+                    WorkApplyReceipt is point-in-time evidence that a single Work manifest was written to,
+                    or observed on, the target member cluster.
+
+                    A receipt only proves that one specific write or observation happened with the recorded
+                    object identity and resource version. It does NOT assert the workload is Healthy and it
+                    does NOT guarantee that the object will not drift afterwards.
+                  properties:
+                    appliedDigest:
+                      description: |-
+                        AppliedDigest is the digest of the manifest actually dispatched to the member cluster,
+                        i.e. after pruning, defaulting and Karmada label/annotation injection (Secret plaintext
+                        fields are removed before digesting).
+                      maxLength: 72
+                      type: string
+                    clusterID:
+                      description: |-
+                        ClusterID is the member cluster identity collected during registration (Cluster.spec.id).
+                        It is recorded alongside ClusterUID to distinguish member cluster rebuilds.
+                      type: string
+                    clusterUID:
+                      description: |-
+                        ClusterUID is the .metadata.uid of the Cluster object when the evidence was produced.
+                        It changes when the Cluster resource is rebuilt.
+                      type: string
+                    confirmedFields:
+                      description: ConfirmedFields lists the aspects verified against the observed object.
+                      items:
+                        type: string
+                      maxItems: 16
+                      type: array
+                    identifier:
+                      description: Identifier links the receipt to a manifest in spec.workload.manifests by ordinal and identity.
+                      properties:
+                        group:
+                          description: Group is the group of the resource.
+                          type: string
+                        kind:
+                          description: Kind is the kind of the resource.
+                          type: string
+                        name:
+                          description: Name is the name of the resource
+                          type: string
+                        namespace:
+                          description: |-
+                            Namespace is the namespace of the resource, the resource is cluster scoped if the value
+                            is empty
+                          type: string
+                        ordinal:
+                          description: |-
+                            Ordinal represents an index in manifests list, so the condition can still be linked
+                            to a manifest even though manifest cannot be parsed successfully.
+                          type: integer
+                        resource:
+                          description: Resource is the resource type of the resource
+                          type: string
+                        version:
+                          description: Version is the version of the resource.
+                          type: string
+                      required:
+                      - kind
+                      - name
+                      - ordinal
+                      - resource
+                      - version
+                      type: object
+                    manifestIdentity:
+                      description: ManifestIdentity is the canonical "group/version/kind/namespace/name" identity of the manifest.
+                      type: string
+                    message:
+                      description: Message is a human-readable, length-capped message. It must never contain Secret plaintext.
+                      maxLength: 1024
+                      type: string
+                    mutationSummary:
+                      description: MutationSummary summarizes how the webhook transformed the original request, recorded separately from the original request content.
+                      properties:
+                        addedAnnotations:
+                          description: AddedAnnotations lists annotation keys added by Karmada defaulting or injection.
+                          items:
+                            type: string
+                          type: array
+                        addedLabels:
+                          description: AddedLabels lists label keys added by Karmada defaulting or injection.
+                          items:
+                            type: string
+                          type: array
+                        removedFields:
+                          description: RemovedFields lists field paths pruned because they are server-managed or irrelevant.
+                          items:
+                            type: string
+                          type: array
+                        webhookSummaryUnavailable:
+                          description: |-
+                            WebhookSummaryUnavailable indicates the Work was created before the feature and the
+                            webhook did not record a request-side summary.
+                          type: boolean
+                      type: object
+                    observedAt:
+                      description: ObservedAt is the time when the write response or readback was observed by the controller.
+                      format: date-time
+                      type: string
+                    observedObject:
+                      description: |-
+                        ObservedObject references the member cluster object returned by the real write response
+                        or a precondition-checked readback. It is nil for Unknown receipts and its UID/resourceVersion
+                        must never be populated from informer cache objects.
+                      properties:
+                        observedGeneration:
+                          description: ObservedGeneration is the .metadata.generation returned by the member API, when available.
+                          format: int64
+                          type: integer
+                        resourceVersion:
+                          description: ResourceVersion is the .metadata.resourceVersion returned by the member API.
+                          type: string
+                        uid:
+                          description: UID is the .metadata.uid returned by the member API.
+                          type: string
+                      required:
+                      - resourceVersion
+                      - uid
+                      type: object
+                    operation:
+                      description: Operation is the member cluster operation that produced the evidence.
+                      enum:
+                      - Created
+                      - Updated
+                      - Unchanged
+                      - Observed
+                      type: string
+                    phase:
+                      description: Phase is the per-manifest completion phase.
+                      enum:
+                      - Applied
+                      - Unknown
+                      type: string
+                    readback:
+                      description: |-
+                        Readback indicates ObservedObject was obtained from a direct member API GET under
+                        identity and ownership preconditions instead of a write response.
+                      type: boolean
+                    reason:
+                      description: Reason is a CamelCase machine-readable reason, particularly required for Unknown receipts.
+                      maxLength: 320
+                      type: string
+                    requestDigest:
+                      description: |-
+                        RequestDigest is the digest of the original request manifest before webhook defaulting
+                        and mutation (Secret plaintext fields are removed before digesting). It is empty when the
+                        Work predates the feature and no webhook summary is available.
+                      maxLength: 72
+                      type: string
+                    secretRedacted:
+                      description: |-
+                        SecretRedacted is true when the manifest is a Secret: plaintext fields were removed
+                        before digesting and are never stored anywhere in the receipt.
+                      type: boolean
+                    workGeneration:
+                      description: |-
+                        WorkGeneration is the Work .metadata.generation pinned when the evidence was produced.
+                        Receipts that do not match the current Work generation are pruned and late responses
+                        belonging to an older generation can never fill current-generation receipts.
+                      format: int64
+                      type: integer
+                    workUID:
+                      description: |-
+                        WorkUID is the Work object UID pinned when the evidence was produced. A receipt whose
+                        WorkUID differs from the current Work object can never describe the current Work.
+                      type: string
+                  required:
+                  - appliedDigest
+                  - clusterUID
+                  - identifier
+                  - manifestIdentity
+                  - observedAt
+                  - operation
+                  - phase
+                  - workGeneration
+                  - workUID
+                  type: object
+                type: array
             type: object
         required:
         - spec

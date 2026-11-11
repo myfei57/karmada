@@ -186,8 +186,10 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		workv1alpha1.ClusterResourceBinding{}.OpenAPIModelName():                        schema_pkg_apis_work_v1alpha1_ClusterResourceBinding(ref),
 		workv1alpha1.ClusterResourceBindingList{}.OpenAPIModelName():                    schema_pkg_apis_work_v1alpha1_ClusterResourceBindingList(ref),
 		workv1alpha1.Manifest{}.OpenAPIModelName():                                      schema_pkg_apis_work_v1alpha1_Manifest(ref),
+		workv1alpha1.ManifestMutationSummary{}.OpenAPIModelName():                      schema_pkg_apis_work_v1alpha1_ManifestMutationSummary(ref),
 		workv1alpha1.ManifestStatus{}.OpenAPIModelName():                                schema_pkg_apis_work_v1alpha1_ManifestStatus(ref),
 		workv1alpha1.ObjectReference{}.OpenAPIModelName():                               schema_pkg_apis_work_v1alpha1_ObjectReference(ref),
+		workv1alpha1.ObservedObjectReference{}.OpenAPIModelName():                       schema_pkg_apis_work_v1alpha1_ObservedObjectReference(ref),
 		workv1alpha1.ResourceBinding{}.OpenAPIModelName():                               schema_pkg_apis_work_v1alpha1_ResourceBinding(ref),
 		workv1alpha1.ResourceBindingList{}.OpenAPIModelName():                           schema_pkg_apis_work_v1alpha1_ResourceBindingList(ref),
 		workv1alpha1.ResourceBindingSpec{}.OpenAPIModelName():                           schema_pkg_apis_work_v1alpha1_ResourceBindingSpec(ref),
@@ -195,6 +197,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		workv1alpha1.ResourceIdentifier{}.OpenAPIModelName():                            schema_pkg_apis_work_v1alpha1_ResourceIdentifier(ref),
 		workv1alpha1.TargetCluster{}.OpenAPIModelName():                                 schema_pkg_apis_work_v1alpha1_TargetCluster(ref),
 		workv1alpha1.Work{}.OpenAPIModelName():                                          schema_pkg_apis_work_v1alpha1_Work(ref),
+		workv1alpha1.WorkApplyReceipt{}.OpenAPIModelName():                              schema_pkg_apis_work_v1alpha1_WorkApplyReceipt(ref),
 		workv1alpha1.WorkList{}.OpenAPIModelName():                                      schema_pkg_apis_work_v1alpha1_WorkList(ref),
 		workv1alpha1.WorkSpec{}.OpenAPIModelName():                                      schema_pkg_apis_work_v1alpha1_WorkSpec(ref),
 		workv1alpha1.WorkStatus{}.OpenAPIModelName():                                    schema_pkg_apis_work_v1alpha1_WorkStatus(ref),
@@ -6583,6 +6586,68 @@ func schema_pkg_apis_work_v1alpha1_Manifest(ref common.ReferenceCallback) common
 	}
 }
 
+func schema_pkg_apis_work_v1alpha1_ManifestMutationSummary(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ManifestMutationSummary records how the mutating webhook transformed the original request manifest, separately from the original request content.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"addedAnnotations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AddedAnnotations lists annotation keys added by Karmada defaulting or injection.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"addedLabels": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AddedLabels lists label keys added by Karmada defaulting or injection.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"removedFields": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RemovedFields lists field paths pruned because they are server-managed or irrelevant.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"webhookSummaryUnavailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "WebhookSummaryUnavailable indicates the Work was created before the feature and the webhook did not record a request-side summary.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_work_v1alpha1_ManifestStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -6691,6 +6756,43 @@ func schema_pkg_apis_work_v1alpha1_ObjectReference(ref common.ReferenceCallback)
 		},
 		Dependencies: []string{
 			resource.Quantity{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_work_v1alpha1_ObservedObjectReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ObservedObjectReference holds the server-confirmed identity of the target member cluster object.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedGeneration is the .metadata.generation returned by the member API, when available.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"resourceVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourceVersion is the .metadata.resourceVersion returned by the member API.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"uid": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UID is the .metadata.uid returned by the member API.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"resourceVersion", "uid"},
+			},
+		},
 	}
 }
 
@@ -7017,6 +7119,161 @@ func schema_pkg_apis_work_v1alpha1_Work(ref common.ReferenceCallback) common.Ope
 	}
 }
 
+func schema_pkg_apis_work_v1alpha1_WorkApplyReceipt(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "WorkApplyReceipt is point-in-time evidence that a single Work manifest was written to, or observed on, the target member cluster.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"appliedDigest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AppliedDigest is the digest of the manifest actually dispatched to the member cluster, i.e. after pruning, defaulting and Karmada label/annotation injection (Secret plaintext fields are removed before digesting).",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"clusterID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClusterID is the member cluster identity collected during registration (Cluster.spec.id). It is recorded alongside ClusterUID to distinguish member cluster rebuilds.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"clusterUID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClusterUID is the .metadata.uid of the Cluster object when the evidence was produced. It changes when the Cluster resource is rebuilt.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"confirmedFields": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ConfirmedFields lists the aspects verified against the observed object.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"identifier": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Identifier links the receipt to a manifest in spec.workload.manifests by ordinal and identity.",
+							Default:     map[string]interface{}{},
+							Ref:         ref(workv1alpha1.ResourceIdentifier{}.OpenAPIModelName()),
+						},
+					},
+					"manifestIdentity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ManifestIdentity is the canonical \"group/version/kind/namespace/name\" identity of the manifest.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Message is a human-readable, length-capped message. It must never contain Secret plaintext.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"mutationSummary": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MutationSummary summarizes how the webhook transformed the original request, recorded separately from the original request content.",
+							Ref:         ref(workv1alpha1.ManifestMutationSummary{}.OpenAPIModelName()),
+						},
+					},
+					"observedAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedAt is the time when the write response or readback was observed by the controller.",
+							Default:     map[string]interface{}{},
+							Ref:         ref(metav1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"observedObject": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedObject references the member cluster object returned by the real write response or a precondition-checked readback. It is nil for Unknown receipts and its UID/resourceVersion must never be populated from informer cache objects.",
+							Ref:         ref(workv1alpha1.ObservedObjectReference{}.OpenAPIModelName()),
+						},
+					},
+					"operation": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Operation is the member cluster operation that produced the evidence.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase is the per-manifest completion phase.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"readback": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Readback indicates ObservedObject was obtained from a direct member API GET under identity and ownership preconditions instead of a write response.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason is a CamelCase machine-readable reason, particularly required for Unknown receipts.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"requestDigest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestDigest is the digest of the original request manifest before webhook defaulting and mutation (Secret plaintext fields are removed before digesting). It is empty when the Work predates the feature and no webhook summary is available.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"secretRedacted": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SecretRedacted is true when the manifest is a Secret: plaintext fields were removed before digesting and are never stored anywhere in the receipt.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"workGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "WorkGeneration is the Work .metadata.generation pinned when the evidence was produced. Receipts that do not match the current Work generation are pruned and late responses belonging to an older generation can never fill current-generation receipts.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"workUID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "WorkUID is the Work object UID pinned when the evidence was produced. A receipt whose WorkUID differs from the current Work object can never describe the current Work.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"appliedDigest", "clusterUID", "identifier", "manifestIdentity", "observedAt", "operation", "phase", "workGeneration", "workUID"},
+			},
+		},
+		Dependencies: []string{
+			workv1alpha1.ManifestMutationSummary{}.OpenAPIModelName(), workv1alpha1.ObservedObjectReference{}.OpenAPIModelName(),
+			workv1alpha1.ResourceIdentifier{}.OpenAPIModelName(), metav1.Time{}.OpenAPIModelName()},
+	}
+}
+
 func schema_pkg_apis_work_v1alpha1_WorkList(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -7135,11 +7392,24 @@ func schema_pkg_apis_work_v1alpha1_WorkStatus(ref common.ReferenceCallback) comm
 							},
 						},
 					},
+					"workApplyReceipts": {
+						SchemaProps: spec.SchemaProps{
+							Description: "WorkApplyReceipts contains per-manifest apply receipts for the latest observed Work generation. It is only populated when the WorkApplyReceipts feature gate is enabled. Each receipt is point-in-time evidence of a confirmed write or observation; it neither asserts workload health nor guarantees the object will not drift later. Receipts whose workGeneration differs from the current Work generation are pruned.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(workv1alpha1.WorkApplyReceipt{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			workv1alpha1.ManifestStatus{}.OpenAPIModelName(), metav1.Condition{}.OpenAPIModelName()},
+			workv1alpha1.ManifestStatus{}.OpenAPIModelName(), workv1alpha1.WorkApplyReceipt{}.OpenAPIModelName(), metav1.Condition{}.OpenAPIModelName()},
 	}
 }
 

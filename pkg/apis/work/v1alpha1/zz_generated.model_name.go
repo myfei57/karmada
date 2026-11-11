@@ -42,8 +42,18 @@ func (in Manifest) OpenAPIModelName() string {
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ManifestMutationSummary) OpenAPIModelName() string {
+	return "com.github.karmada-io.karmada.pkg.apis.work.v1alpha1.ManifestMutationSummary"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in ManifestStatus) OpenAPIModelName() string {
 	return "com.github.karmada-io.karmada.pkg.apis.work.v1alpha1.ManifestStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ObservedObjectReference) OpenAPIModelName() string {
+	return "com.github.karmada-io.karmada.pkg.apis.work.v1alpha1.ObservedObjectReference"
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
@@ -84,6 +94,11 @@ func (in TargetCluster) OpenAPIModelName() string {
 // OpenAPIModelName returns the OpenAPI model name for this type.
 func (in Work) OpenAPIModelName() string {
 	return "com.github.karmada-io.karmada.pkg.apis.work.v1alpha1.Work"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in WorkApplyReceipt) OpenAPIModelName() string {
+	return "com.github.karmada-io.karmada.pkg.apis.work.v1alpha1.WorkApplyReceipt"
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.

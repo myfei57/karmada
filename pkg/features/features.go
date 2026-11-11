@@ -163,6 +163,16 @@ const (
 	// owner: @XiShanYongYe-Chang, @RainbowMango, @mszacillo
 	// alpha: v1.18
 	SchedulingOvercommitProtection featuregate.Feature = "SchedulingOvercommitProtection"
+
+	// WorkApplyReceipts enables per-manifest apply receipts on Work status.
+	// When enabled, the execution controller records point-in-time evidence for every
+	// manifest create/update (or precondition-checked readback), pinning the Work UID and
+	// generation, cluster UID, manifest digests and the member cluster object UID and
+	// resourceVersion returned by the real API. Receipts neither assert workload health
+	// nor guarantee absence of future drift.
+	//
+	// alpha: v1.21
+	WorkApplyReceipts featuregate.Feature = "WorkApplyReceipts"
 )
 
 var (
@@ -193,6 +203,7 @@ var (
 		ControllerPriorityQueue:           {Default: true, PreRelease: featuregate.Beta},
 		WorkloadAffinity:                  {Default: false, PreRelease: featuregate.Alpha},
 		SchedulingOvercommitProtection:    {Default: false, PreRelease: featuregate.Alpha},
+		WorkApplyReceipts:                 {Default: false, PreRelease: featuregate.Alpha},
 	}
 )
 
@@ -203,4 +214,9 @@ func init() {
 // PriorityBasedPreemptiveSchedulingEnabled reports whether priority-based preemptive scheduling is enabled.
 func PriorityBasedPreemptiveSchedulingEnabled() bool {
 	return FeatureGate.Enabled(PriorityBasedScheduling) && FeatureGate.Enabled(PriorityBasedPreemptiveScheduling)
+}
+
+// WorkApplyReceiptsEnabled reports whether the Work apply receipts feature is enabled.
+func WorkApplyReceiptsEnabled() bool {
+	return FeatureGate.Enabled(WorkApplyReceipts)
 }

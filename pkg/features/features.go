@@ -163,6 +163,16 @@ const (
 	// owner: @XiShanYongYe-Chang, @RainbowMango, @mszacillo
 	// alpha: v1.18
 	SchedulingOvercommitProtection featuregate.Feature = "SchedulingOvercommitProtection"
+
+	// StatusCoverageReport gates the optional strict gate of the read-only
+	// StatusCoverageReport protocol. The report itself never changes the
+	// default aggregator state; this gate only allows an explicitly
+	// configured strict gate to produce pass/fail results, and its integrity
+	// data stays separate from the legacy health fields.
+	//
+	// owner: @karmada-io
+	// alpha: v1.21
+	StatusCoverageReport featuregate.Feature = "StatusCoverageReport"
 )
 
 var (
@@ -193,6 +203,7 @@ var (
 		ControllerPriorityQueue:           {Default: true, PreRelease: featuregate.Beta},
 		WorkloadAffinity:                  {Default: false, PreRelease: featuregate.Alpha},
 		SchedulingOvercommitProtection:    {Default: false, PreRelease: featuregate.Alpha},
+		StatusCoverageReport:              {Default: false, PreRelease: featuregate.Alpha},
 	}
 )
 

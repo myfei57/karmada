@@ -23,6 +23,19 @@ import (
 	"k8s.io/component-base/featuregate"
 )
 
+func TestStatusCoverageReportFeatureGate(t *testing.T) {
+	spec, exists := FeatureGate.GetAll()[StatusCoverageReport]
+	if !exists {
+		t.Fatalf("feature gate %q is not registered", StatusCoverageReport)
+	}
+	if spec.Default {
+		t.Errorf("feature gate %q should be disabled by default", StatusCoverageReport)
+	}
+	if spec.PreRelease != featuregate.Alpha {
+		t.Errorf("feature gate %q pre-release stage = %q, want %q", StatusCoverageReport, spec.PreRelease, featuregate.Alpha)
+	}
+}
+
 func TestPriorityBasedPreemptiveSchedulingFeatureGate(t *testing.T) {
 	spec, exists := FeatureGate.GetAll()[PriorityBasedPreemptiveScheduling]
 	if !exists {
